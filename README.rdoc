@@ -541,7 +541,7 @@ Office365Storage에 다음 형식으로 저장됩니다:
 # 설명: "Issue #123: 프로젝트 기획서 작성"
 
 Office365Storage.get("DOC.123")
-# => "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+# => "ADAACFAA-AACB-AAE7-AAAA-E4F4ABDCAACF"
 
 # 모든 SharePoint 연결 조회
 all_docs = Office365Storage.where("key LIKE ?", "DOC.%")
@@ -554,7 +554,7 @@ all_docs = Office365Storage.where("key LIKE ?", "DOC.%")
 tail -f log/production.log | grep "Office365"
 
 # 성공 예시:
-# Office365: Issue #123에서 SharePoint GUID 저장됨: 1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF
+# Office365: Issue #123에서 SharePoint GUID 저장됨: ADAACFAA-AACB-AAE7-AAAA-E4F4ABDCAACF
 
 # 실패 예시:
 # Office365: Issue #123에서 SharePoint URL의 GUID 추출 실패: https://...

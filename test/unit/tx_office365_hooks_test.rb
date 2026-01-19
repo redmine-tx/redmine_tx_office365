@@ -119,13 +119,13 @@ class TxOffice365HooksTest < ActiveSupport::TestCase
     
     # Mock TxGraph::SharePoint::LinkConverter
     converter = Minitest::Mock.new
-    converter.expect(:get_guid_from_url, 'TEST-GUID-456', [String])
+    converter.expect(:get_guid_from_url, 'TEST-GUID-AAA', [String])
     
     TxGraph::SharePoint::LinkConverter.stub(:new, converter) do
       TxOffice365Hooks.extract_and_store_sharepoint_guid(issue)
       
       # 기존 이슈이므로 바로 저장되어야 함
-      assert_equal 'TEST-GUID-456', Office365Storage.get("DOC.#{issue.id}")
+      assert_equal 'TEST-GUID-AAA', Office365Storage.get("DOC.#{issue.id}")
     end
     
     converter.verify
@@ -133,12 +133,12 @@ class TxOffice365HooksTest < ActiveSupport::TestCase
 
   test "should save pending guid" do
     issue = Issue.find(1)
-    issue.instance_variable_set(:@pending_sharepoint_guid, 'PENDING-GUID-789')
+    issue.instance_variable_set(:@pending_sharepoint_guid, 'PENDING-GUID-BBB')
     
     TxOffice365Hooks.save_pending_guid(issue)
     
     # pending GUID가 저장되어야 함
-    assert_equal 'PENDING-GUID-789', Office365Storage.get("DOC.#{issue.id}")
+    assert_equal 'PENDING-GUID-BBB', Office365Storage.get("DOC.#{issue.id}")
     
     # pending GUID가 제거되어야 함
     assert_nil issue.instance_variable_get(:@pending_sharepoint_guid)
