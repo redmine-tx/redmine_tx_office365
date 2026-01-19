@@ -35,7 +35,7 @@ class TxOffice365IssuePatchTest < ActiveSupport::TestCase
 
   test "should return sharepoint_guid when manually set" do
     issue = Issue.find(1)
-    test_guid = "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+    test_guid = "ADAACFAA-AACB-AAEA-AAAA-EAFAABDCAACF"
     
     Office365Storage.set("DOC.#{issue.id}", test_guid)
     assert_equal test_guid, issue.sharepoint_guid
@@ -43,7 +43,7 @@ class TxOffice365IssuePatchTest < ActiveSupport::TestCase
 
   test "should return true for has_sharepoint_document? when guid is set" do
     issue = Issue.find(1)
-    test_guid = "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+    test_guid = "ADAACFAA-AACB-AAEA-AAAA-EAFAABDCAACF"
     
     Office365Storage.set("DOC.#{issue.id}", test_guid)
     assert_equal true, issue.has_sharepoint_document?
@@ -51,7 +51,7 @@ class TxOffice365IssuePatchTest < ActiveSupport::TestCase
 
   test "should generate sharepoint_embed_url correctly" do
     issue = Issue.find(1)
-    test_guid = "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+    test_guid = "ADAACFAA-AACB-AAEA-AAAA-EAFAABDCAACF"
     site_url = "https://supercreative.sharepoint.com/sites/TestSite"
     
     Office365Storage.set("DOC.#{issue.id}", test_guid)
@@ -67,7 +67,7 @@ class TxOffice365IssuePatchTest < ActiveSupport::TestCase
 
   test "should clear sharepoint guid" do
     issue = Issue.find(1)
-    test_guid = "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+    test_guid = "ADAACFAA-AACB-AAEA-AAAA-EAFAABDCAACF"
     
     Office365Storage.set("DOC.#{issue.id}", test_guid)
     assert_equal test_guid, issue.sharepoint_guid

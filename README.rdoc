@@ -423,7 +423,7 @@ Issue 모델에 추가된 메소드들:
 ```ruby
 # 이슈에 연결된 SharePoint 문서의 GUID 조회
 @issue.sharepoint_guid
-# => "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+# => "ADAACFAA-AACB-AAEA-AAAA-EAFAABDCAACF"
 
 # SharePoint 문서가 연결되어 있는지 확인
 @issue.has_sharepoint_document?
