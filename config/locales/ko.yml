@@ -1,0 +1,16 @@
+# Korean strings go here for Rails i18n
+ko:
+  tx_office365_settings_title: "Microsoft Graph 설정"
+  tx_office365_tenant_id: "Tenant ID"
+  tx_office365_client_id: "Client ID"
+  tx_office365_client_secret: "Client Secret"
+  tx_office365_client_secret_hint: "비워두면 기존 값이 유지됩니다."
+  tx_office365_sharepoint_site_url: "SharePoint 사이트 URL"
+  tx_office365_sharepoint_site_url_hint: "이슈에 연결된 문서를 표시할 때 사용할 SharePoint 도메인 URL (예: https://supercreative.sharepoint.com)"
+  
+  label_sharepoint_document: "연결된 SharePoint 문서"
+  label_sharepoint_document_attached: "SharePoint 문서 연결됨"
+  label_document_guid: "문서 GUID"
+  label_open_in_sharepoint: "SharePoint에서 열기"
+
+

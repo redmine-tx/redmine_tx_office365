@@ -1,0 +1,47 @@
+  <div class="sharepoint-embed" style="margin-top: 10px;">
+    <iframe 
+      src="<%= issue.sharepoint_embed_url(site_url: site_url) %>" 
+      width="100%" 
+      height="600px" 
+      frameborder="0"
+      allowfullscreen="true"
+      style="border: 1px solid #e0e0e0; border-radius: 4px;">
+    </iframe>
+  </div>
+<script>
+(function() {
+  // '설명' 헤더 바로 다음으로 SharePoint 문서 박스 이동
+  function moveSharePointBox() {
+    var sharepointBox = document.querySelector('.sharepoint-embed');
+    if (!sharepointBox) return;
+    
+    // 이미 이동했으면 중복 방지
+    if (sharepointBox.getAttribute('data-moved') === 'true') return;
+    
+    // '설명' 섹션의 위키 콘텐츠 영역 찾기
+    var descriptionDiv = document.querySelector('div.issue div.description');
+    
+    if (descriptionDiv) {
+      // h4 헤더('설명') 찾기
+      var header = descriptionDiv.querySelector('h4');
+      
+      if (header) {
+        // h4 헤더 바로 다음에 삽입
+        header.parentNode.insertBefore(sharepointBox, header.nextSibling);
+      } else {
+        // 헤더가 없으면 description div 맨 앞에 삽입
+        descriptionDiv.insertBefore(sharepointBox, descriptionDiv.firstChild);
+      }
+      
+      sharepointBox.setAttribute('data-moved', 'true');
+    }
+  }
+  
+  // DOM 로드 완료 시 또는 즉시 실행
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', moveSharePointBox);
+  } else {
+    moveSharePointBox();
+  }
+})();
+</script>

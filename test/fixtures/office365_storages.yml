@@ -1,0 +1,26 @@
+# Office365Storage fixtures for testing
+
+sample_string:
+  key: sample_string
+  value: 'Sample Value'
+  value_type: string
+  description: 'Sample string value'
+
+sample_integer:
+  key: sample_integer
+  value: '42'
+  value_type: integer
+  description: 'Sample integer value'
+
+sample_boolean:
+  key: sample_boolean
+  value: 'true'
+  value_type: boolean
+  description: 'Sample boolean value'
+
+sample_json:
+  key: sample_json
+  value: '{"name":"Test","count":100}'
+  value_type: json
+  description: 'Sample JSON value'
+

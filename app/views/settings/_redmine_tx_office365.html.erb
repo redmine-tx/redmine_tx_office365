@@ -1,0 +1,26 @@
+<fieldset class="box tabular">
+  <legend><%= l(:tx_office365_settings_title) %></legend>
+
+  <p>
+    <label><%= l(:tx_office365_tenant_id) %></label>
+    <%= text_field_tag 'settings[tenant_id]', settings['tenant_id'], size: 50 %>
+  </p>
+
+  <p>
+    <label><%= l(:tx_office365_client_id) %></label>
+    <%= text_field_tag 'settings[client_id]', settings['client_id'], size: 50 %>
+  </p>
+
+  <p>
+    <label><%= l(:tx_office365_client_secret) %></label>
+    <%= text_field_tag 'settings[client_secret]', settings['client_secret'], size: 50, autocomplete: 'new-password' %>
+  </p>
+
+  <p>
+    <label><%= l(:tx_office365_sharepoint_site_url) %></label>
+    <%= text_field_tag 'settings[sharepoint_site_url]', settings['sharepoint_site_url'], size: 70, placeholder: 'https://supercreative.sharepoint.com' %>
+    <em class="info"><%= l(:tx_office365_sharepoint_site_url_hint) %></em>
+  </p>
+</fieldset>
+
+

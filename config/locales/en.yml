@@ -1,0 +1,14 @@
+# English strings go here for Rails i18n
+en:
+  tx_office365_settings_title: "Microsoft Graph settings"
+  tx_office365_tenant_id: "Tenant ID"
+  tx_office365_client_id: "Client ID"
+  tx_office365_client_secret: "Client secret"
+  tx_office365_client_secret_hint: "Leave blank to keep the existing value."
+  tx_office365_sharepoint_site_url: "SharePoint Site URL"
+  tx_office365_sharepoint_site_url_hint: "SharePoint domain URL to use when displaying documents linked to issues (e.g., https://supercreative.sharepoint.com)"
+
+  label_sharepoint_document: "Linked SharePoint Document"
+  label_sharepoint_document_attached: "SharePoint document attached"
+  label_document_guid: "Document GUID"
+  label_open_in_sharepoint: "Open in SharePoint"

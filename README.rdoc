@@ -1,0 +1,700 @@
+## Redmine Tx Office365 플러그인 사용 매뉴얼
+
+이 플러그인은 **Microsoft Graph API**를 사용하여 SharePoint/OneDrive 문서 연동 및 Outlook 일정 관리 기능을 제공합니다.
+
+현재 구현은 **Client Credentials Flow(앱 권한, Application permission)** 기반입니다.
+
+---
+
+## 1) Azure 설정
+
+이 플러그인을 사용하려면 먼저 Microsoft Azure(Entra ID)에서 앱을 등록하고 필요한 권한을 설정해야 합니다.
+
+### 📘 상세 설정 가이드
+
+Azure 앱 등록, Client Secret 발급, 권한 설정, 관리자 동의 등 Azure 관련 모든 설정은 별도 문서를 참조하세요:
+
+**👉 [MS_AZURE.md - Microsoft Azure 설정 가이드](./MS_AZURE.md)**
+
+### 필요한 정보
+
+Azure 설정 완료 후 다음 3가지 값이 필요합니다:
+
+- **`TENANT_ID`**: Directory (tenant) ID
+- **`CLIENT_ID`**: Application (client) ID  
+- **`CLIENT_SECRET`**: Client secret value
+
+### 플러그인에 설정 적용
+
+#### 방법 1: Redmine 플러그인 설정 화면 (권장)
+
+1. Redmine 관리자 로그인
+2. **관리** → **플러그인** → **Redmine Tx Office365 plugin** → **설정**
+3. 발급받은 Azure 정보 입력
+
+#### 방법 2: 환경변수
+
+```bash
+export TENANT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+export CLIENT_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+export CLIENT_SECRET="your-secret-value"
+```
+
+---
+
+## 2) 실행 방법
+
+```bash
+ruby /Users/testors/conv.rb
+```
+
+성공 시 예시 출력:
+- Access Token 발급 성공
+- 토큰 길이
+- 유효시간(초)
+- 추출된 GUID
+- 자동 생성된 Embed URL
+
+---
+
+## 3) 레드마인(Redmine)에서 주기 실행 시 참고
+
+- 로깅:
+  - Redmine/Rails 환경이면 `Rails.logger`로 기록됩니다.
+- 토큰 만료 대응:
+  - API 요청이 **401**로 실패하면 **토큰을 1회 재발급 후 동일 요청을 1회 재시도**합니다.
+- 멀티 프로세스 환경:
+  - 토큰은 `Rails.cache`에 저장되어 모든 프로세스가 공유합니다.
+
+---
+
+## 4) TxGraph 사용 예제
+
+### 4.1) TokenManager 초기화 및 토큰 발급
+
+#### 방법 1: 레드마인 플러그인 설정 자동 사용 (권장)
+
+```ruby
+require_relative 'lib/tx_graph'
+
+# 플러그인 설정(tenant_id, client_id, client_secret)을 자동으로 사용
+token_manager = TxGraph::Auth::TokenManager.new
+
+# 토큰 가져오기 (필요시 자동 발급/갱신)
+access_token = token_manager.token
+puts "Access Token: #{access_token[0..50]}..."
+
+# 토큰 남은 시간 확인
+puts "토큰 유효시간: #{token_manager.expires_in}초"
+
+# 강제 갱신
+token_manager.force_refresh!
+```
+
+#### 방법 2: 수동으로 인증 정보 지정
+
+```ruby
+# TokenManager 생성 (플러그인 설정과 별도로 사용하고 싶을 때)
+token_manager = TxGraph::Auth::TokenManager.new(
+  tenant_id: ENV['TENANT_ID'],
+  client_id: ENV['CLIENT_ID'],
+  client_secret: ENV['CLIENT_SECRET'],
+  scope: 'https://graph.microsoft.com/.default',
+  refresh_skew: 60  # 만료 60초 전에 자동 갱신
+)
+```
+
+### 4.2) SharePoint 공유 링크 → GUID 변환
+
+```ruby
+# LinkConverter 초기화 (플러그인 설정 자동 사용)
+converter = TxGraph::SharePoint::LinkConverter.new
+
+# SharePoint 공유 링크에서 GUID 추출
+sharing_url = "https://yourcompany.sharepoint.com/:p:/r/sites/YourSite/_layouts/15/Doc.aspx?sourcedoc=%7B1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF%7D&action=edit"
+guid = converter.get_guid_from_url(sharing_url)
+
+if guid
+  puts "추출된 GUID: #{guid}"
+  # PowerPoint Embed URL 생성
+  embed_url = "https://yourcompany.sharepoint.com/sites/YourSite/_layouts/15/embed.aspx?uniqueid=#{guid}"
+  puts "Embed URL: #{embed_url}"
+else
+  puts "GUID 추출 실패"
+end
+```
+
+### 4.3) Outlook 일정 생성
+
+```ruby
+# EventService 초기화 (플러그인 설정 자동 사용)
+event_service = TxGraph::Outlook::Calendar::EventService.new
+
+# 일정 생성
+event = event_service.create_event(
+  user_id: 'user@yourcompany.com',  # UPN 또는 User Object ID
+  subject: '팀 미팅',
+  start_at: '2025-12-24T10:00:00',
+  end_at: '2025-12-24T11:00:00',
+  time_zone: 'Asia/Seoul',
+  body: '<p>프로젝트 진행 상황 공유</p>',
+  location: '회의실 A',
+  attendees: [
+    { email: 'member1@yourcompany.com', name: '김철수', type: 'required' },
+    { email: 'member2@yourcompany.com', name: '이영희', type: 'optional' }
+  ]
+)
+
+if event
+  puts "일정 생성 성공: #{event['id']}"
+  puts "웹 링크: #{event['webLink']}"
+else
+  puts "일정 생성 실패"
+end
+```
+
+### 4.4) Outlook 일정 삭제
+
+```ruby
+# 생성된 일정 삭제
+success = event_service.delete_event(
+  user_id: 'user@yourcompany.com',
+  event_id: event['id']
+)
+
+if success
+  puts "일정 삭제 완료"
+else
+  puts "일정 삭제 실패"
+end
+```
+
+### 4.5) Http Client 직접 사용
+
+```ruby
+# 저수준 HTTP 클라이언트 사용 (커스텀 API 호출, 플러그인 설정 자동 사용)
+client = TxGraph::Http::Client.new
+
+# GET 요청
+status, body = client.get('/me')
+if status == '200'
+  user = JSON.parse(body)
+  puts "사용자: #{user['displayName']}"
+end
+
+# POST 요청
+status, body = client.post(
+  '/users/user@yourcompany.com/messages',
+  json_body: {
+    subject: '테스트 메일',
+    body: { contentType: 'Text', content: '테스트입니다.' },
+    toRecipients: [{ emailAddress: { address: 'recipient@example.com' } }]
+  }
+)
+```
+
+### 4.6) 레드마인 플러그인에서 사용
+
+```ruby
+# 컨트롤러나 모델에서 직접 사용 (플러그인 설정 자동 적용)
+class AttendancesController < ApplicationController
+  def create_calendar_event
+    # EventService가 자동으로 플러그인 설정을 읽어서 초기화됨
+    event_service = TxGraph::Outlook::Calendar::EventService.new
+    
+    event = event_service.create_event(
+      user_id: User.current.mail,
+      subject: "근무: #{@attendance.work_date}",
+      start_at: @attendance.start_time,
+      end_at: @attendance.end_time,
+      time_zone: 'Asia/Seoul'
+    )
+    
+    if event
+      @attendance.update(calendar_event_id: event['id'])
+      flash[:notice] = '일정이 생성되었습니다.'
+    else
+      flash[:error] = '일정 생성에 실패했습니다.'
+    end
+  end
+  
+  def delete_calendar_event
+    event_service = TxGraph::Outlook::Calendar::EventService.new
+    
+    if event_service.delete_event(
+      user_id: User.current.mail,
+      event_id: @attendance.calendar_event_id
+    )
+      @attendance.update(calendar_event_id: nil)
+      flash[:notice] = '일정이 삭제되었습니다.'
+    else
+      flash[:error] = '일정 삭제에 실패했습니다.'
+    end
+  end
+end
+
+# SharePoint 링크 변환 예제
+class IssuesController < ApplicationController
+  def show
+    # 이슈 설명에서 SharePoint 링크를 찾아 GUID 추출
+    converter = TxGraph::SharePoint::LinkConverter.new
+    
+    @issue.description.scan(/https:\/\/.*sharepoint\.com[^\s]+/).each do |link|
+      guid = converter.get_guid_from_url(link)
+      # GUID를 이용한 후속 처리...
+    end
+  end
+end
+```
+
+---
+
+## 5) Office365Storage (Key-Value 스토리지)
+
+플러그인에서 사용할 수 있는 영구 Key-Value 스토리지입니다. 설정값, 캐시, 상태 등을 저장하는데 사용할 수 있습니다.
+
+### 5.1) 마이그레이션 실행
+
+```bash
+cd /Users/testors/redmine-ssr/redmine-dev
+bundle exec rake redmine:plugins:migrate NAME=redmine_tx_office365 RAILS_ENV=production
+```
+
+### 5.2) 기본 사용법
+
+```ruby
+# 값 저장
+Office365Storage.set('last_sync_time', Time.now, description: '마지막 동기화 시각')
+Office365Storage.set('sync_count', 100)
+Office365Storage.set('is_enabled', true)
+Office365Storage.set('config', { api_version: 'v1.0', timeout: 30 })
+
+# 값 조회
+last_sync = Office365Storage.get('last_sync_time')  # Time 객체 반환
+count = Office365Storage.get('sync_count')          # 100
+enabled = Office365Storage.get('is_enabled')        # true
+config = Office365Storage.get('config')             # Hash 반환
+
+# 값 삭제
+Office365Storage.delete('old_key')
+
+# 키 존재 확인
+if Office365Storage.exists?('last_sync_time')
+  # 처리...
+end
+```
+
+### 5.3) 여러 값 한번에 처리
+
+```ruby
+# 여러 값 조회
+values = Office365Storage.get_multi('key1', 'key2', 'key3')
+# => { 'key1' => value1, 'key2' => value2, 'key3' => value3 }
+
+# 여러 값 저장
+Office365Storage.set_multi({
+  'setting1' => 'value1',
+  'setting2' => 'value2',
+  'setting3' => 'value3'
+}, description: '일괄 설정')
+
+# 모든 키 조회
+all_keys = Office365Storage.keys
+# => ['last_sync_time', 'sync_count', 'is_enabled', ...]
+```
+
+### 5.4) 숫자 증감
+
+```ruby
+# 카운터 증가
+Office365Storage.set('api_call_count', 0)
+Office365Storage.increment('api_call_count')      # 1
+Office365Storage.increment('api_call_count', by: 5)  # 6
+
+# 카운터 감소
+Office365Storage.decrement('api_call_count')      # 5
+Office365Storage.decrement('api_call_count', by: 3)  # 2
+```
+
+### 5.5) 실제 사용 예제
+
+```ruby
+# 동기화 상태 관리
+class Office365SyncService
+  def sync_calendars
+    # 마지막 동기화 시각 확인
+    last_sync = Office365Storage.get('calendar_last_sync')
+    
+    if last_sync && (Time.now - last_sync) < 5.minutes
+      Rails.logger.info "최근에 동기화됨: #{last_sync}"
+      return
+    end
+    
+    # 동기화 실행
+    begin
+      event_service = TxGraph::Outlook::Calendar::EventService.new
+      # ... 동기화 로직 ...
+      
+      # 성공 시 시각 저장
+      Office365Storage.set('calendar_last_sync', Time.now)
+      Office365Storage.increment('calendar_sync_success_count')
+    rescue => e
+      Office365Storage.increment('calendar_sync_error_count')
+      Rails.logger.error "동기화 실패: #{e.message}"
+    end
+  end
+end
+
+# API 호출 제한 관리
+class Office365RateLimiter
+  def can_call_api?
+    count = Office365Storage.get('api_calls_today') || 0
+    limit = Office365Storage.get('api_daily_limit') || 5000
+    
+    count < limit
+  end
+  
+  def record_api_call
+    # 오늘 날짜를 키에 포함
+    key = "api_calls_#{Date.today.strftime('%Y%m%d')}"
+    Office365Storage.increment(key)
+  end
+end
+
+# 기능 플래그
+class FeatureFlags
+  def self.calendar_sync_enabled?
+    Office365Storage.get('feature_calendar_sync_enabled') || false
+  end
+  
+  def self.enable_calendar_sync!
+    Office365Storage.set('feature_calendar_sync_enabled', true)
+  end
+  
+  def self.disable_calendar_sync!
+    Office365Storage.set('feature_calendar_sync_enabled', false)
+  end
+end
+```
+
+### 5.6) 지원되는 데이터 타입
+
+- **String**: 일반 문자열
+- **Integer**: 정수
+- **Float**: 부동소수점
+- **Boolean**: true/false
+- **Hash/Array**: JSON으로 직렬화되어 저장
+
+---
+
+## 6) 이슈 자동 SharePoint 연동
+
+레드마인 이슈에 SharePoint URL이 포함되면 자동으로 GUID를 추출하여 저장하는 기능입니다.
+
+### 6.1) 자동 동작
+
+**Controller Hooks 기반으로 동작합니다:**
+- `controller_issues_new_before_save` - 이슈 생성 전
+- `controller_issues_edit_before_save` - 이슈 수정 전
+- `controller_issues_bulk_edit_before_save` - 이슈 일괄 수정 전
+- `controller_issues_new_after_save` - 이슈 생성 후 (새 이슈의 ID 확정 후 GUID 저장)
+
+이슈를 생성하거나 본문(description)을 수정할 때, SharePoint URL이 포함되어 있으면:
+1. TxGraph::SharePoint::LinkConverter로 자동으로 GUID 추출
+2. Office365Storage에 `DOC.[이슈ID]` 키로 GUID 저장
+3. 로그에 성공/실패 메시지 기록
+
+**장점:**
+- Issue 모델을 직접 수정하지 않아 플러그인 제거 시 깔끔함
+- Redmine의 표준 확장 방식 사용
+- 다른 플러그인과의 충돌 가능성 최소화
+
+**지원되는 URL 형식:**
+```
+https://supercreative.sharepoint.com/:p:/g/IQB1z6Udy4jnSZWW5PSr3HbPAULbh0gcOxAePDOuglzWHcE?e=I7OJwS
+https://yourcompany.sharepoint.com/:f:/r/sites/YourSite/Documents/file.xlsx?sourcedoc=%7BGUID%7D
+https://example.sharepoint.com/sites/ProjectA/_layouts/15/Doc.aspx?sourcedoc={GUID}
+```
+
+### 6.2) 헬퍼 메소드
+
+Issue 모델에 추가된 메소드들:
+
+```ruby
+# 이슈에 연결된 SharePoint 문서의 GUID 조회
+@issue.sharepoint_guid
+# => "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+
+# SharePoint 문서가 연결되어 있는지 확인
+@issue.has_sharepoint_document?
+# => true
+
+# Embed URL 생성 (PowerPoint, Excel 등 미리보기용)
+@issue.sharepoint_embed_url(site_url: "https://supercreative.sharepoint.com/sites/YourSite")
+# => "https://supercreative.sharepoint.com/sites/YourSite/_layouts/15/embed.aspx?uniqueid=1DA5CF75-..."
+
+# 저장된 GUID 삭제
+@issue.clear_sharepoint_guid
+```
+
+### 6.3) 자동 문서 표시 (View Hook)
+
+**플러그인이 자동으로 이슈 상세 페이지에 SharePoint 문서를 표시합니다.**
+
+1. **플러그인 설정에서 SharePoint 사이트 URL 설정**
+   - 관리 > 플러그인 > Redmine Tx Office365 plugin > 설정
+   - "SharePoint Site URL" 입력 (예: `https://supercreative.sharepoint.com/sites/YourSite`)
+
+2. **자동 표시 위치**
+   - 이슈 상세 페이지의 본문(Description) 하단
+   - `Office365Storage`에 `DOC.[이슈ID]` 키가 있으면 자동으로 iframe 표시
+
+3. **표시되는 내용**
+   - SharePoint 문서 제목
+   - 600px 높이의 iframe (PowerPoint, Excel, Word 등 미리보기)
+   - 문서 GUID (코드 블록)
+   - "SharePoint에서 열기" 링크 (새 창)
+
+**자동 표시 비활성화:**
+
+View Hook을 비활성화하려면 `lib/tx_office365_hooks.rb`에서 `view_issues_show_description_bottom` 메소드를 주석 처리하거나 삭제하세요.
+
+### 6.4) 뷰에서 수동 사용 (헬퍼 메소드)
+
+자동 표시 외에 다른 위치에서 사용하려면:
+
+```erb
+<!-- 헬퍼 메소드로 간단하게 -->
+<%= sharepoint_document_box(@issue, site_url: 'https://supercreative.sharepoint.com/sites/YourSite') %>
+
+<!-- 또는 수동으로 -->
+<% if @issue.has_sharepoint_document? %>
+  <div class="box">
+    <h3>연결된 SharePoint 문서</h3>
+    <div class="sharepoint-embed">
+      <iframe 
+        src="<%= @issue.sharepoint_embed_url(site_url: 'https://supercreative.sharepoint.com/sites/YourSite') %>" 
+        width="100%" 
+        height="600px" 
+        frameborder="0">
+      </iframe>
+    </div>
+    <p>
+      <strong>문서 GUID:</strong> <%= @issue.sharepoint_guid %>
+    </p>
+  </div>
+<% end %>
+```
+
+**이슈 목록에서 SharePoint 문서 아이콘 표시:**
+
+```erb
+<!-- 헬퍼 메소드 사용 -->
+<%= sharepoint_document_icon(@issue) %>
+
+<!-- 또는 수동으로 -->
+<% if issue.has_sharepoint_document? %>
+  <span class="icon icon-file" title="SharePoint 문서 연결됨"></span>
+<% end %>
+```
+
+### 6.5) 컨트롤러/모델에서 사용
+
+```ruby
+# 이슈 생성 후 SharePoint GUID 확인
+class IssuesController < ApplicationController
+  def create
+    @issue = Issue.new(issue_params)
+    
+    if @issue.save
+      # 자동으로 SharePoint GUID가 추출되어 저장됨
+      if @issue.has_sharepoint_document?
+        flash[:notice] = "이슈가 생성되었습니다. SharePoint 문서가 연결되었습니다."
+      else
+        flash[:notice] = "이슈가 생성되었습니다."
+      end
+    end
+  end
+end
+
+# 배치 작업으로 모든 이슈의 SharePoint GUID 조회
+class SharePointReportService
+  def generate_document_report
+    issues_with_docs = Issue.all.select(&:has_sharepoint_document?)
+    
+    issues_with_docs.each do |issue|
+      puts "Issue ##{issue.id}: #{issue.subject}"
+      puts "  GUID: #{issue.sharepoint_guid}"
+      puts "  Embed: #{issue.sharepoint_embed_url(site_url: site_url)}"
+    end
+  end
+end
+```
+
+### 6.6) 저장 키 구조
+
+Office365Storage에 다음 형식으로 저장됩니다:
+
+```ruby
+# 키: "DOC.[이슈ID]"
+# 값: SharePoint 문서 GUID
+# 설명: "Issue #123: 프로젝트 기획서 작성"
+
+Office365Storage.get("DOC.123")
+# => "1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF"
+
+# 모든 SharePoint 연결 조회
+all_docs = Office365Storage.where("key LIKE ?", "DOC.%")
+```
+
+### 6.7) 로그 확인
+
+```bash
+# production.log에서 SharePoint 관련 로그 확인
+tail -f log/production.log | grep "Office365"
+
+# 성공 예시:
+# Office365: Issue #123에서 SharePoint GUID 저장됨: 1DA5CF75-88CB-49E7-9596-E4F4ABDC76CF
+
+# 실패 예시:
+# Office365: Issue #123에서 SharePoint URL의 GUID 추출 실패: https://...
+```
+
+### 6.8) 기술 구현
+
+**파일 구조:**
+- `lib/tx_office365_hooks.rb` - Controller Hook 구현체
+  - SharePoint URL 감지 및 GUID 추출 로직
+  - 새 이슈의 경우 인스턴스 변수에 임시 저장 후 `after_save`에서 저장
+- `lib/tx_office365_issue_patch.rb` - Issue 모델 헬퍼 메소드
+  - `sharepoint_guid`, `has_sharepoint_document?` 등 읽기 전용 메소드만 추가
+  - 저장 로직은 포함하지 않음
+
+**동작 순서:**
+1. 이슈 생성/수정 시 `before_save` Hook 실행
+2. SharePoint URL 패턴 매칭: `/https://[^/\s]+\.sharepoint\.com/[^\s]+/`
+3. GUID 추출 (TxGraph API 호출)
+4. 신규 이슈: `@pending_sharepoint_guid` 인스턴스 변수에 임시 저장
+5. 기존 이슈: Office365Storage에 즉시 저장
+6. 신규 이슈의 경우 `after_save` Hook에서 확정된 ID로 저장
+
+**콘솔에서 테스트:**
+
+Hook 로직은 클래스 메소드로 노출되어 있어 Rails 콘솔에서 직접 테스트할 수 있습니다.
+
+```ruby
+# Rails 콘솔 실행
+cd /Users/testors/redmine-ssr/redmine-dev
+bundle exec rails console
+
+# 한 줄로 테스트
+TxOffice365Hooks.extract_and_store_sharepoint_guid(Issue.find(123))
+
+# 결과 확인
+issue = Issue.find(123)
+puts "GUID: #{issue.sharepoint_guid}"
+puts "연결됨: #{issue.has_sharepoint_document?}"
+
+# SharePoint URL이 포함된 이슈로 테스트
+issue = Issue.find(123)
+issue.description = "문서: https://supercreative.sharepoint.com/:p:/g/IQB1z6Udy4jnSZWW5PSr3HbPAULbh0gcOxAePDOuglzWHcE"
+TxOffice365Hooks.extract_and_store_sharepoint_guid(issue)
+puts Office365Storage.get("DOC.#{issue.id}")
+
+# 전체 프로세스 테스트 (한 줄)
+issue = Issue.find(123); issue.description = "https://supercreative.sharepoint.com/:p:/g/test"; TxOffice365Hooks.extract_and_store_sharepoint_guid(issue); issue.sharepoint_guid
+```
+
+### 6.9) 주의사항
+
+- 플러그인 설정에서 `tenant_id`, `client_id`, `client_secret`이 올바르게 설정되어 있어야 합니다
+- Microsoft Graph API 권한 (`Sites.Read.All` 또는 `Files.Read.All`)이 부여되어 있어야 합니다
+- 이슈 본문에 여러 SharePoint URL이 있어도 첫 번째 URL만 처리됩니다
+- GUID 추출에 실패해도 이슈 저장은 정상적으로 진행됩니다
+- Controller Hook 방식이므로 API나 다른 방법으로 이슈를 생성하면 동작하지 않을 수 있습니다
+
+---
+
+## 7) 문제 해결(Troubleshooting)
+
+### Azure 설정 관련 문제
+
+Azure 앱 등록, 권한 설정, 인증 관련 문제는 별도 문서를 참조하세요:
+
+**👉 [MS_AZURE.md - 문제 해결 섹션](./MS_AZURE.md#8-문제-해결-troubleshooting)**
+
+다음과 같은 에러가 발생하면 MS_AZURE.md를 확인하세요:
+- `401 Unauthorized` - 토큰 발급 실패
+- `403 Forbidden` - 권한 부족
+- `AADSTS7000215` - Client Secret 오류
+
+### 캐시 관련 이슈
+
+**문제**: 토큰이 제대로 갱신되지 않음
+
+**원인**:
+- `Rails.cache`가 올바르게 설정되지 않음
+- 캐시 스토어가 작동하지 않음
+
+**해결 방법**:
+- 캐시 스토어 확인 (Redis, Memcached 등)
+- 개발 환경에서는 기본 메모리 캐시 사용
+- 프로덕션 환경에서는 Redis 등 영구 캐시 권장
+
+```ruby
+# Rails 콘솔에서 캐시 확인
+Rails.cache.write('test', 'value')
+Rails.cache.read('test')  # => "value"
+```
+
+### SharePoint GUID 추출 실패
+
+**문제**: 이슈에 SharePoint URL을 입력했는데 GUID가 추출되지 않음
+
+**원인**:
+- URL 형식이 지원되지 않음
+- Microsoft Graph API 권한 부족
+- 파일이 삭제되었거나 권한이 없음
+
+**해결 방법**:
+
+1. 로그 확인:
+```bash
+tail -f log/production.log | grep "Office365"
+```
+
+2. 지원되는 URL 형식 확인 (섹션 6.1 참조)
+
+3. Rails 콘솔에서 직접 테스트:
+```ruby
+converter = TxGraph::SharePoint::LinkConverter.new
+guid = converter.get_guid_from_url("your-sharepoint-url")
+puts guid
+```
+
+### Office365Storage 관련 문제
+
+**문제**: `Office365Storage` 테이블이 없다는 에러
+
+**원인**: 마이그레이션이 실행되지 않음
+
+**해결 방법**:
+```bash
+cd /Users/testors/redmine-ssr/redmine-dev
+bundle exec rake redmine:plugins:migrate NAME=redmine_tx_office365 RAILS_ENV=production
+```
+
+### 로그 확인 방법
+
+```bash
+# 전체 로그 확인
+tail -f log/production.log
+
+# Office365 관련 로그만 필터링
+tail -f log/production.log | grep -i "office365\|txgraph"
+
+# 에러만 확인
+tail -f log/production.log | grep -i "error\|exception"
+```
+
+
