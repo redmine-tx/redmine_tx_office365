@@ -96,12 +96,15 @@ class TxOffice365Hooks < Redmine::Hook::ViewListener
           nil
         end
         
+        # 기존 site_id 추출
+        existing_site_id = existing_data.is_a?(Hash) ? existing_data['site_id'] : nil
+        
         # GUID 추출
         guid = converter.get_guid_from_url(url)
         
         if guid
-          # 새로운 이슈이거나 GUID가 변경된 경우에만 저장
-          if !existing_guid || existing_guid != guid
+          # 새로운 이슈이거나 GUID 또는 site_id가 변경된 경우 저장
+          if !existing_guid || existing_guid != guid || existing_site_id != site_id
             # GUID와 사이트 ID를 JSON으로 저장
             data = { 'guid' => guid }
             data['site_id'] = site_id if site_id
