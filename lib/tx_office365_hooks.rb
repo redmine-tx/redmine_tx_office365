@@ -29,26 +29,14 @@ class TxOffice365Hooks < Redmine::Hook::ViewListener
       'https://supercreative.sharepoint.com'
     end
   end
-  # 이슈 생성 전 Hook
-  def controller_issues_new_before_save(context = {})
-    self.class.extract_and_store_sharepoint_guid(context[:issue])
-  end
-
-  # 이슈 수정 전 Hook
-  def controller_issues_edit_before_save(context = {})
-    self.class.extract_and_store_sharepoint_guid(context[:issue])
-  end
-
-  # 이슈 일괄 수정 전 Hook
-  def controller_issues_bulk_edit_before_save(context = {})
-    issue = context[:issue]
-    self.class.extract_and_store_sharepoint_guid(issue) if issue
-  end
-
-  # 이슈 생성 후 Hook (새 이슈의 ID가 확정된 후)
-  def controller_issues_new_after_save(context = {})
-    self.class.save_pending_guid(context[:issue])
-  end
+  # 컨트롤러 훅은 Model callback으로 대체되었습니다.
+  # Model callback (tx_office365_issue_patch.rb)이 모든 저장 경로를 커버합니다:
+  # - 웹 UI 업데이트
+  # - API 업데이트
+  # - Console/Rake task
+  # - 일괄 업데이트
+  #
+  # 따라서 컨트롤러 훅은 더 이상 필요하지 않으며, 중복 실행을 방지하기 위해 제거되었습니다.
 
   # 클래스 메소드로 변경하여 콘솔에서 직접 호출 가능하게 함
   class << self
@@ -56,10 +44,12 @@ class TxOffice365Hooks < Redmine::Hook::ViewListener
     # 사용법: TxOffice365Hooks.extract_and_store_sharepoint_guid(Issue.find(123))
     def extract_and_store_sharepoint_guid(issue)
       return unless issue
+      Rails.logger.info("Office365: extract_and_store_sharepoint_guid 시작 - Issue ##{issue.id || 'NEW'}")
       return unless issue.description.present?
 
       # SharePoint URL 패턴 (*.sharepoint.com 도메인)
       sharepoint_urls = issue.description.scan(%r{https://[^/\s]+\.sharepoint\.com/[^\s]+})
+      Rails.logger.info("Office365: SharePoint URL #{sharepoint_urls.count}개 발견")
       
       # URL이 없고 기존에 저장된 데이터가 있으면 삭제
       if sharepoint_urls.empty?
@@ -98,16 +88,18 @@ class TxOffice365Hooks < Redmine::Hook::ViewListener
         
         # 기존 site_id 추출
         existing_site_id = existing_data.is_a?(Hash) ? existing_data['site_id'] : nil
-        
-        # GUID 추출
-        guid = converter.get_guid_from_url(url)
+
+        # GUID 추출 (1. URL에서 직접 추출 시도, 2. Graph API 호출)
+        guid = extract_guid_from_url(url) || converter.get_guid_from_url(url)
         
         if guid
           # 새로운 이슈이거나 GUID 또는 site_id가 변경된 경우 저장
           if !existing_guid || existing_guid != guid || existing_site_id != site_id
-            # GUID와 사이트 ID를 JSON으로 저장
+            # GUID, 사이트 ID, 원본 URL, 파일 타입 정보를 JSON으로 저장
             data = { 'guid' => guid }
             data['site_id'] = site_id if site_id
+            data['source_url'] = url
+            data['file_type'] = extract_file_type_from_url(url)
             
             # 이슈가 아직 저장되지 않은 경우 (새 이슈)는 after_save 콜백 등록
             if issue.id
@@ -125,6 +117,70 @@ class TxOffice365Hooks < Redmine::Hook::ViewListener
         end
       rescue => e
         Rails.logger.error("Office365: Issue ##{issue.id || 'NEW'} SharePoint GUID 추출 중 오류: #{e.class} - #{e.message}")
+      end
+    end
+
+    # URL에서 GUID 직접 추출 (sourcedoc 파라미터 또는 URL 경로에서)
+    # 지원하는 형식:
+    # 1. ?sourcedoc=%7BGUID%7D 또는 ?sourcedoc={GUID} (Office Online 에디터 링크)
+    # 2. OneNote URL의 wd=target(...)에 포함된 GUID
+    def extract_guid_from_url(url)
+      require 'cgi'
+      require 'uri'
+
+      begin
+        uri = URI.parse(url)
+
+        # 1. sourcedoc 쿼리 파라미터에서 GUID 추출
+        if uri.query
+          params = CGI.parse(uri.query)
+          if params['sourcedoc'] && params['sourcedoc'].any?
+            sourcedoc = params['sourcedoc'].first
+            # {GUID} 형식에서 GUID만 추출
+            if match = sourcedoc.match(/\{?([a-fA-F0-9\-]{36})\}?/)
+              return match[1].upcase
+            end
+          end
+
+          # 2. OneNote URL의 wd=target(...)에 포함된 GUID 추출
+          if params['wd'] && params['wd'].any?
+            wd_param = params['wd'].first
+            # target(...|GUID|...) 형식에서 GUID 추출
+            guids = wd_param.scan(/([a-fA-F0-9\-]{36})/)
+            if guids.any?
+              # 첫 번째 GUID 반환 (OneNote 페이지 GUID)
+              return guids.first.first.upcase
+            end
+          end
+        end
+      rescue => e
+        Rails.logger.debug("URL 파싱 중 오류 (무시됨): #{e.message}")
+      end
+
+      nil
+    end
+
+    # URL에서 파일 타입 추출
+    # SharePoint 공유 링크 형식: /:타입:/...
+    # - :x: = Excel
+    # - :p: = PowerPoint
+    # - :w: = Word
+    # - :b: = PDF
+    # - :u: = 일반 파일
+    # - :f: = 폴더
+    def extract_file_type_from_url(url)
+      if match = url.match(%r{/:([a-z]):/})
+        case match[1]
+        when 'x' then 'excel'
+        when 'p' then 'powerpoint'
+        when 'w' then 'word'
+        when 'b' then 'pdf'
+        when 'f' then 'folder'
+        when 'u' then 'file'
+        else match[1]
+        end
+      else
+        nil
       end
     end
 

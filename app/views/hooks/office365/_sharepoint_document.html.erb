@@ -1,30 +1,55 @@
+<% if issue.sharepoint_supports_embed? %>
+  <%# Excel, PowerPoint: iframe embed 표시 %>
   <div class="sharepoint-embed" style="margin-top: 10px;">
-    <iframe 
-      src="<%= issue.sharepoint_embed_url(site_url: site_url) %>" 
-      width="100%" 
-      height="600px" 
+    <iframe
+      src="<%= issue.sharepoint_embed_url(site_url: site_url) %>"
+      width="100%"
+      height="600px"
       frameborder="0"
       allowfullscreen="true"
       style="border: 1px solid #e0e0e0; border-radius: 4px;">
     </iframe>
   </div>
+<% else %>
+  <%# Word, PDF 등: 링크만 표시 %>
+  <div class="sharepoint-embed" style="margin-top: 10px; padding: 15px; background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 4px;">
+    <p style="margin: 0 0 10px 0;">
+      <strong>📄 <%= issue.sharepoint_file_type&.capitalize || 'SharePoint' %> 문서</strong>
+    </p>
+    <p style="margin: 0; font-size: 0.9em; color: #666;">
+      이 문서는 iframe embed를 지원하지 않습니다. 아래 링크를 클릭하여 새 창에서 여세요.
+    </p>
+    <p style="margin: 10px 0 0 0;">
+      <% source_url = issue.sharepoint_source_url %>
+      <% if source_url %>
+        <a href="<%= source_url %>" target="_blank" rel="noopener noreferrer"
+           style="display: inline-block; padding: 8px 16px; background: #0078d4; color: white; text-decoration: none; border-radius: 4px;">
+          새 창에서 열기 →
+        </a>
+      <% else %>
+        <span style="color: #999;">원본 URL을 찾을 수 없습니다.</span>
+      <% end %>
+    </p>
+  </div>
+<% end %>
+
 <script>
 (function() {
   // '설명' 헤더 바로 다음으로 SharePoint 문서 박스 이동
   function moveSharePointBox() {
     var sharepointBox = document.querySelector('.sharepoint-embed');
     if (!sharepointBox) return;
-    
+
     // 이미 이동했으면 중복 방지
     if (sharepointBox.getAttribute('data-moved') === 'true') return;
-    
+
     // '설명' 섹션의 위키 콘텐츠 영역 찾기
     var descriptionDiv = document.querySelector('div.issue div.description');
-    
+
     if (descriptionDiv) {
       // h4 헤더('설명') 찾기
       var header = descriptionDiv.querySelector('h4');
-      
+
       if (header) {
         // h4 헤더 바로 다음에 삽입
         header.parentNode.insertBefore(sharepointBox, header.nextSibling);
@@ -32,11 +57,11 @@
         // 헤더가 없으면 description div 맨 앞에 삽입
         descriptionDiv.insertBefore(sharepointBox, descriptionDiv.firstChild);
       }
-      
+
       sharepointBox.setAttribute('data-moved', 'true');
     }
   }
-  
+
   // DOM 로드 완료 시 또는 즉시 실행
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', moveSharePointBox);
